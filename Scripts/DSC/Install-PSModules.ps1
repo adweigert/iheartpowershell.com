@@ -1,4 +1,4 @@
-#requires -Version 5
+#requires -Version 4
 
 [CmdletBinding()]
 param
@@ -11,14 +11,21 @@ param
     [string] $Path = $("$($env:USERPROFILE)\Documents\WindowsPowerShell\Modules")
 )
 
-$Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($Credential.UserName):$($Credential.GetNetworkCredential().Password)"));
+Add-Type -Assembly System.IO.Compression.FileSystem
+
+$Authorization  = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($Credential.UserName):$($Credential.GetNetworkCredential().Password)"));
+$DownloadFolder = "$($env:USERPROFILE)\Downloads\PowerShell"
+
+if (!(Test-Path -Path $DownloadFolder -PathType Container)) {
+    New-Item -Path $DownloadFolder -ItemType Directory | Out-Null
+}
 
 @((Invoke-WebRequest -Uri https://api.github.com/users/PowerShell/repos -Headers @{Authorization=$Authorization}).Content | ConvertFrom-Json)[0].ForEach{
     Write-Verbose "Processing repository $($_.name)..."
 
     $FileUrl           = "$($_.html_url)/archive/master.zip"
-    $DestinationFile   = "$($env:USERPROFILE)\Downloads\PowerShell\$($_.name).zip"
-    $DestinationFolder = "$($env:USERPROFILE)\Downloads\PowerShell\$($_.name)"
+    $DestinationFile   = "$($DownloadFolder)\$($_.name).zip"
+    $DestinationFolder = "$($DownloadFolder)\$($_.name)"
     $ContentFolder     = "$($DestinationFolder)\$($_.name)-master"
     $ModuleFolder      = "$Path\$($_.name)"
 
@@ -32,7 +39,7 @@ $Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.Get
         Remove-Item -Path $DestinationFolder -Recurse -Force
     }
 
-    Expand-Archive -Path $DestinationFile -DestinationPath $DestinationFolder -Force
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($DestinationFile, $DestinationFolder)
 
     if (Get-ChildItem -Path $ContentFolder | Where-Object Extension -match '\.(psd1|psm1)') {
         Write-Verbose "Publishing '$($_.name)' PowerShell module to '$ModuleFolder'..."
